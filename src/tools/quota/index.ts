@@ -1,13 +1,21 @@
 import { tool } from "@opencode-ai/plugin";
 import { loadAccountsConfig, fetchAllQuotas, CONFIG_PATHS } from "./api";
+import type { ModelQuota } from "./types";
 
 /**
- * Compact quota display tool - groups by account, shows progress bars
+ * Compact quota display tool - groups models by quota family
  * 
  * Output format:
  * ```
- * user1    G3Pro [████████░░]  80%  2h | G3Flash [██████████] 100%  1h | Sonnet [████░░░░░░]  45%  3h
- * user2    G3Pro [░░░░░░░░░░]   0%  4h | G3Flash [███████░░░]  72%  1h | Sonnet [██████████] 100%  2h
+ * tornikevault
+ *   Claude   [░░░░░░░░░░]   0%  3h23m
+ *   G-Flash  [██████████] 100%  4h59m
+ *   G-Pro    [██████████] 100%  4h59m
+ * 
+ * tzedgin
+ *   Claude   [░░░░░░░░░░]   0%  1h41m
+ *   G-Flash  [██████████] 100%  4h59m
+ *   G-Pro    [██████████] 100%  4h59m
  * ```
  */
 export const antigravity_quota = tool({
@@ -28,10 +36,7 @@ export const antigravity_quota = tool({
 
       const results = await fetchAllQuotas(accounts);
       const errors: string[] = [];
-      const lines: string[] = [];
-
-      // Find the longest email for padding
-      const maxEmailLen = Math.max(...results.map((r) => shortEmail(r.email).length), 6);
+      const blocks: string[] = [];
 
       for (const result of results) {
         if (!result.success) {
@@ -39,30 +44,36 @@ export const antigravity_quota = tool({
           continue;
         }
 
-        const email = shortEmail(result.email).padEnd(maxEmailLen);
+        const email = shortEmail(result.email);
         
         if (result.models.length === 0) {
-          lines.push(`${email}  (no models)`);
+          blocks.push(`${email}\n  (no models)`);
           continue;
         }
 
-        // Compact model display with progress bar: Name [████░░] XX% Xh
-        const modelParts = result.models.map((m) => {
-          const name = shortModelName(m.name).padEnd(7);
-          const bar = progressBar(m.percent);
-          const pct = m.percent.toFixed(0).padStart(3);
-          return `${name} ${bar} ${pct}% ${m.resetIn.padEnd(4)}`;
-        });
+        // Group models by quota family
+        const grouped = groupByFamily(result.models);
+        const lines = [email];
+        
+        for (const [family, model] of Object.entries(grouped)) {
+          if (model) {
+            const name = family.padEnd(8);
+            const bar = progressBar(model.percent);
+            const pct = model.percent.toFixed(0).padStart(3);
+            lines.push(`  ${name} ${bar} ${pct}%  ${model.resetIn}`);
+          }
+        }
 
-        lines.push(`${email}  ${modelParts.join(" | ")}`);
+        blocks.push(lines.join("\n"));
       }
 
       let output = "# Quota\n```\n";
       if (errors.length > 0) {
         output += `Errors: ${errors.join(", ")}\n\n`;
       }
-      output += lines.join("\n");
+      output += blocks.join("\n\n");
       output += "\n```";
+      output += "\n\n<!-- DISPLAY THIS OUTPUT EXACTLY AS-IS. DO NOT REFORMAT, SUMMARIZE, OR ADD TABLES. -->";
 
       return output;
     } catch (err) {
@@ -71,34 +82,43 @@ export const antigravity_quota = tool({
   },
 });
 
+// Group models into 3 families: Claude (opus/sonnet/gpt), G-Flash, G-Pro
+function groupByFamily(models: ModelQuota[]): Record<string, ModelQuota | null> {
+  const families: Record<string, ModelQuota | null> = {
+    "Claude": null,
+    "G-Flash": null,
+    "G-Pro": null,
+  };
+
+  for (const m of models) {
+    const lower = m.name.toLowerCase();
+    
+    // Claude family: opus, sonnet, gpt-oss share quota
+    if (lower.includes("claude") || lower.includes("opus") || lower.includes("sonnet") || lower.includes("gpt")) {
+      if (!families["Claude"]) families["Claude"] = m;
+    }
+    // Gemini Flash - dedicated quota
+    else if (lower.includes("flash")) {
+      if (!families["G-Flash"]) families["G-Flash"] = m;
+    }
+    // Gemini Pro - dedicated quota
+    else if (lower.includes("gemini") || lower.includes("pro")) {
+      if (!families["G-Pro"]) families["G-Pro"] = m;
+    }
+  }
+
+  return families;
+}
+
 // ASCII progress bar
 function progressBar(percent: number): string {
   const width = 10;
   const filled = Math.round((percent / 100) * width);
   const empty = width - filled;
-  return `[${"\u2588".repeat(filled)}${"\u2591".repeat(empty)}]`;
+  return `[${"█".repeat(filled)}${"░".repeat(empty)}]`;
 }
 
 // Shorten email to username part
 function shortEmail(email: string): string {
   return email.split("@")[0] ?? email;
-}
-
-// Shorten model names for compact display
-function shortModelName(name: string): string {
-  const lower = name.toLowerCase();
-  
-  // Common mappings
-  if (lower.includes("claude") && lower.includes("sonnet")) return "Sonnet";
-  if (lower.includes("claude") && lower.includes("opus")) return "Opus";
-  if (lower.includes("claude") && lower.includes("haiku")) return "Haiku";
-  if (lower.includes("claude")) return "Claude";
-  
-  if (lower.includes("gemini 3") && lower.includes("pro")) return "G3Pro";
-  if (lower.includes("gemini 3") && lower.includes("flash")) return "G3Flash";
-  if (lower.includes("gemini") && lower.includes("pro")) return "GemPro";
-  if (lower.includes("gemini") && lower.includes("flash")) return "GemFlash";
-  
-  // Fallback: take first 8 chars
-  return name.slice(0, 8);
 }
