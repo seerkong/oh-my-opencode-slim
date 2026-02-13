@@ -6,7 +6,7 @@ export function formatGrepResult(result: GrepResult): string {
   }
 
   if (result.matches.length === 0) {
-    return 'No matches found.';
+    return '未找到匹配项。';
   }
 
   const lines: string[] = [];
@@ -26,9 +26,9 @@ export function formatGrepResult(result: GrepResult): string {
     }
   }
 
-  const summary = `Found ${result.totalMatches} matches in ${result.filesSearched} files`;
+  const summary = `在 ${result.filesSearched} 个文件中找到 ${result.totalMatches} 个匹配项`;
   if (result.truncated) {
-    lines.push(`\n${summary} (output truncated)`);
+    lines.push(`\n${summary}（输出已截断）`);
   } else {
     lines.push(`\n${summary}`);
   }

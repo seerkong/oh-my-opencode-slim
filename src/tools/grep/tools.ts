@@ -4,42 +4,36 @@ import { formatGrepResult } from './utils';
 
 export const grep: ToolDefinition = tool({
   description:
-    'Fast content search tool with safety limits (60s timeout, 10MB output). ' +
-    'Searches file contents using regular expressions. ' +
-    'Supports full regex syntax (eg. "log.*Error", "function\\s+\\w+", etc.). ' +
-    'Filter files by pattern with the include parameter (e.g. "*.js", "*.{ts,tsx}"). ' +
-    'Returns file paths with matches sorted by modification time.',
+    '快速内容搜索工具，带安全限制（60秒超时，10MB输出）。' +
+    '使用正则表达式搜索文件内容。' +
+    '支持完整正则语法（如 "log.*Error"、"function\\s+\\w+" 等）。' +
+    '通过 include 参数按模式过滤文件（如 "*.js"、"*.{ts,tsx}"）。' +
+    '返回按修改时间排序的匹配文件路径。',
   args: {
-    pattern: tool.schema
-      .string()
-      .describe('The regex pattern to search for in file contents'),
+    pattern: tool.schema.string().describe('在文件内容中搜索的正则表达式模式'),
     include: tool.schema
       .string()
       .optional()
-      .describe(
-        'File pattern to include in the search (e.g. "*.js", "*.{ts,tsx}")',
-      ),
+      .describe('搜索中包含的文件模式（如 "*.js"、"*.{ts,tsx}"）'),
     path: tool.schema
       .string()
       .optional()
-      .describe(
-        'The directory to search in. Defaults to the current working directory.',
-      ),
+      .describe('搜索目录。默认为当前工作目录。'),
     caseSensitive: tool.schema
       .boolean()
       .optional()
       .default(false)
-      .describe('Perform case-sensitive search (default: false)'),
+      .describe('执行区分大小写的搜索（默认：false）'),
     wholeWord: tool.schema
       .boolean()
       .optional()
       .default(false)
-      .describe('Match whole words only (default: false)'),
+      .describe('仅匹配完整单词（默认：false）'),
     fixedStrings: tool.schema
       .boolean()
       .optional()
       .default(false)
-      .describe('Treat pattern as literal string (default: false)'),
+      .describe('将模式视为字面字符串（默认：false）'),
   },
   execute: async (args) => {
     try {

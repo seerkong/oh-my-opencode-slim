@@ -131,7 +131,7 @@ describe('BackgroundTaskManager', () => {
       await Promise.resolve();
 
       expect(task.status).toBe('failed');
-      expect(task.error).toBe('Failed to create background session');
+      expect(task.error).toBe('创建后台会话失败');
     });
 
     test('multiple launches return immediately', async () => {
@@ -562,7 +562,7 @@ describe('BackgroundTaskManager', () => {
       await new Promise((r) => setTimeout(r, 10));
 
       expect(task.status).toBe('failed');
-      expect(task.error).toContain('All fallback models failed');
+      expect(task.error).toContain('所有备用模型均失败');
     });
 
     test('extracts content from multiple types and messages', async () => {

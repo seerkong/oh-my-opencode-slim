@@ -1,15 +1,15 @@
 /**
- * Phase reminder to inject before each user message.
- * Keeps workflow instructions in the immediate attention window
- * to combat instruction-following degradation over long contexts.
+ * 阶段提醒，在每条用户消息前注入。
+ * 将工作流指令保持在即时注意力窗口中，
+ * 以对抗长上下文中指令遵循能力的退化。
  *
- * Research: "LLMs Get Lost In Multi-Turn Conversation" (arXiv:2505.06120)
- * shows ~40% compliance drop after 2-3 turns without reminders.
+ * 研究："LLMs Get Lost In Multi-Turn Conversation"（arXiv:2505.06120）
+ * 表明在没有提醒的情况下，2-3 轮对话后合规率下降约 40%。
  *
- * Uses experimental.chat.messages.transform so it doesn't show in UI.
+ * 使用 experimental.chat.messages.transform，因此不会在 UI 中显示。
  */
-const PHASE_REMINDER = `<reminder>⚠️ MANDATORY: Understand→DELEGATE(! based on each agent rules)→Split-and-Parallelize(?)→Plan→Execute→Verify
-Available Specialist: @oracle @librarian @explorer @designer @fixer
+const PHASE_REMINDER = `<reminder>⚠️ 强制执行：理解→委派（！根据每个代理规则）→拆分并行化（？）→计划→执行→验证
+可用专家：@oracle @librarian @explorer @designer @fixer
 </reminder>`;
 
 interface MessageInfo {
@@ -30,9 +30,9 @@ interface MessageWithParts {
 }
 
 /**
- * Creates the experimental.chat.messages.transform hook for phase reminder injection.
- * This hook runs right before sending to API, so it doesn't affect UI display.
- * Only injects for the orchestrator agent.
+ * 创建用于阶段提醒注入的 experimental.chat.messages.transform 钩子。
+ * 此钩子在发送到 API 之前运行，因此不会影响 UI 显示。
+ * 仅为 orchestrator 代理注入。
  */
 export function createPhaseReminderHook() {
   return {

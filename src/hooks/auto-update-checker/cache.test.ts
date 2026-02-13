@@ -1,4 +1,12 @@
-import { describe, expect, mock, test } from 'bun:test';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  mock,
+  spyOn,
+  test,
+} from 'bun:test';
 import * as fs from 'node:fs';
 import { invalidatePackage } from './cache';
 
@@ -12,19 +20,22 @@ mock.module('../../shared/logger', () => ({
   log: mock(() => {}),
 }));
 
-// Mock fs and path
-mock.module('node:fs', () => ({
-  existsSync: mock(() => false),
-  rmSync: mock(() => {}),
-  readFileSync: mock(() => ''),
-  writeFileSync: mock(() => {}),
-}));
-
 mock.module('../../cli/config-manager', () => ({
   stripJsonComments: (s: string) => s,
 }));
 
 describe('auto-update-checker/cache', () => {
+  beforeEach(() => {
+    spyOn(fs, 'existsSync').mockReturnValue(false);
+    spyOn(fs, 'rmSync').mockImplementation(() => undefined);
+    spyOn(fs, 'readFileSync').mockReturnValue('' as any);
+    spyOn(fs, 'writeFileSync').mockImplementation(() => undefined as any);
+  });
+
+  afterEach(() => {
+    mock.restore();
+  });
+
   describe('invalidatePackage', () => {
     test('returns false when nothing to invalidate', () => {
       const existsMock = fs.existsSync as any;

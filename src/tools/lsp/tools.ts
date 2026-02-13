@@ -21,11 +21,11 @@ const formatError = (e: unknown): string =>
   `Error: ${e instanceof Error ? e.message : String(e)}`;
 
 export const lsp_goto_definition: ToolDefinition = tool({
-  description: 'Jump to symbol definition. Find WHERE something is defined.',
+  description: '跳转到符号定义。查找符号的定义位置。',
   args: {
-    filePath: tool.schema.string().describe('Absolute path to the file'),
-    line: tool.schema.number().min(1).describe('1-based line number'),
-    character: tool.schema.number().min(0).describe('0-based character offset'),
+    filePath: tool.schema.string().describe('文件的绝对路径'),
+    line: tool.schema.number().min(1).describe('基于 1 的行号'),
+    character: tool.schema.number().min(0).describe('基于 0 的字符偏移量'),
   },
   execute: async (args) => {
     try {
@@ -38,12 +38,12 @@ export const lsp_goto_definition: ToolDefinition = tool({
       });
 
       if (!result) {
-        return 'No definition found';
+        return '未找到定义';
       }
 
       const locations = Array.isArray(result) ? result : [result];
       if (locations.length === 0) {
-        return 'No definition found';
+        return '未找到定义';
       }
 
       return locations.map(formatLocation).join('\n');
@@ -54,16 +54,15 @@ export const lsp_goto_definition: ToolDefinition = tool({
 });
 
 export const lsp_find_references: ToolDefinition = tool({
-  description:
-    'Find ALL usages/references of a symbol across the entire workspace.',
+  description: '查找符号在整个工作区中的所有用法/引用。',
   args: {
-    filePath: tool.schema.string().describe('Absolute path to the file'),
-    line: tool.schema.number().min(1).describe('1-based line number'),
-    character: tool.schema.number().min(0).describe('0-based character offset'),
+    filePath: tool.schema.string().describe('文件的绝对路径'),
+    line: tool.schema.number().min(1).describe('基于 1 的行号'),
+    character: tool.schema.number().min(0).describe('基于 0 的字符偏移量'),
     includeDeclaration: tool.schema
       .boolean()
       .optional()
-      .describe('Include the declaration itself'),
+      .describe('包含声明本身'),
   },
   execute: async (args) => {
     try {
@@ -77,7 +76,7 @@ export const lsp_find_references: ToolDefinition = tool({
       });
 
       if (!result || result.length === 0) {
-        return 'No references found';
+        return '未找到引用';
       }
 
       const total = result.length;
@@ -88,7 +87,7 @@ export const lsp_find_references: ToolDefinition = tool({
       const lines = limited.map(formatLocation);
       if (truncated) {
         lines.unshift(
-          `Found ${total} references (showing first ${DEFAULT_MAX_REFERENCES}):`,
+          `找到 ${total} 个引用（显示前 ${DEFAULT_MAX_REFERENCES} 个）：`,
         );
       }
       return lines.join('\n');
@@ -99,14 +98,13 @@ export const lsp_find_references: ToolDefinition = tool({
 });
 
 export const lsp_diagnostics: ToolDefinition = tool({
-  description:
-    'Get errors, warnings, hints from language server BEFORE running build.',
+  description: '在运行构建之前从语言服务器获取错误、警告和提示。',
   args: {
-    filePath: tool.schema.string().describe('Absolute path to the file'),
+    filePath: tool.schema.string().describe('文件的绝对路径'),
     severity: tool.schema
       .enum(['error', 'warning', 'information', 'hint', 'all'])
       .optional()
-      .describe('Filter by severity level'),
+      .describe('按严重级别过滤'),
   },
   execute: async (args) => {
     try {
@@ -129,7 +127,7 @@ export const lsp_diagnostics: ToolDefinition = tool({
       diagnostics = filterDiagnosticsBySeverity(diagnostics, args.severity);
 
       if (diagnostics.length === 0) {
-        return 'No diagnostics found';
+        return '未找到诊断信息';
       }
 
       const total = diagnostics.length;
@@ -140,7 +138,7 @@ export const lsp_diagnostics: ToolDefinition = tool({
       const lines = limited.map(formatDiagnostic);
       if (truncated) {
         lines.unshift(
-          `Found ${total} diagnostics (showing first ${DEFAULT_MAX_DIAGNOSTICS}):`,
+          `找到 ${total} 条诊断信息（显示前 ${DEFAULT_MAX_DIAGNOSTICS} 条）：`,
         );
       }
       return lines.join('\n');
@@ -151,13 +149,12 @@ export const lsp_diagnostics: ToolDefinition = tool({
 });
 
 export const lsp_rename: ToolDefinition = tool({
-  description:
-    'Rename symbol across entire workspace. APPLIES changes to all files.',
+  description: '在整个工作区中重命名符号。将更改应用到所有文件。',
   args: {
-    filePath: tool.schema.string().describe('Absolute path to the file'),
-    line: tool.schema.number().min(1).describe('1-based line number'),
-    character: tool.schema.number().min(0).describe('0-based character offset'),
-    newName: tool.schema.string().describe('New symbol name'),
+    filePath: tool.schema.string().describe('文件的绝对路径'),
+    line: tool.schema.number().min(1).describe('基于 1 的行号'),
+    character: tool.schema.number().min(0).describe('基于 0 的字符偏移量'),
+    newName: tool.schema.string().describe('新的符号名称'),
   },
   execute: async (args) => {
     try {

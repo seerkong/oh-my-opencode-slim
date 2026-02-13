@@ -6,7 +6,7 @@ export function formatSearchResult(result: SgResult): string {
   }
 
   if (result.matches.length === 0) {
-    return 'No matches found.';
+    return '未找到匹配项。';
   }
 
   const lines: string[] = [];
@@ -32,9 +32,9 @@ export function formatSearchResult(result: SgResult): string {
   }
 
   const fileCount = byFile.size;
-  const summary = `Found ${result.totalMatches} matches in ${fileCount} files`;
+  const summary = `在 ${fileCount} 个文件中找到 ${result.totalMatches} 个匹配项`;
   if (result.truncated) {
-    lines.push(`\n${summary} (output truncated: ${result.truncatedReason})`);
+    lines.push(`\n${summary}（输出已截断：${result.truncatedReason}）`);
   } else {
     lines.push(`\n${summary}`);
   }
@@ -51,11 +51,11 @@ export function formatReplaceResult(
   }
 
   if (result.matches.length === 0) {
-    return 'No matches found for replacement.';
+    return '未找到需要替换的匹配项。';
   }
 
   const lines: string[] = [];
-  const mode = isDryRun ? '[DRY RUN]' : '[APPLIED]';
+  const mode = isDryRun ? '[试运行]' : '[已应用]';
 
   // Group by file
   const byFile = new Map<string, typeof result.matches>();
@@ -77,7 +77,7 @@ export function formatReplaceResult(
         ? match.replacement.length > 60
           ? `${match.replacement.substring(0, 60)}...`
           : match.replacement
-        : '[no replacement]';
+        : '[无替换内容]';
       lines.push(
         `  ${startLine}: "${original.replace(/\n/g, '\\n')}" → "${replacement.replace(/\n/g, '\\n')}"`,
       );
@@ -86,11 +86,11 @@ export function formatReplaceResult(
 
   const fileCount = byFile.size;
   lines.push(
-    `\n${mode} ${result.totalMatches} replacements in ${fileCount} files`,
+    `\n${mode} 在 ${fileCount} 个文件中进行了 ${result.totalMatches} 处替换`,
   );
 
   if (isDryRun) {
-    lines.push('\nTo apply changes, run with dryRun=false');
+    lines.push('\n要应用更改，请使用 dryRun=false 运行');
   }
 
   return lines.join('\n');
@@ -105,20 +105,20 @@ export function getEmptyResultHint(
   if (lang === 'python') {
     if (src.startsWith('class ') && src.endsWith(':')) {
       const withoutColon = src.slice(0, -1);
-      return `Hint: Remove trailing colon. Try: "${withoutColon}"`;
+      return `提示：移除末尾冒号。尝试："${withoutColon}"`;
     }
     if (
       (src.startsWith('def ') || src.startsWith('async def ')) &&
       src.endsWith(':')
     ) {
       const withoutColon = src.slice(0, -1);
-      return `Hint: Remove trailing colon. Try: "${withoutColon}"`;
+      return `提示：移除末尾冒号。尝试："${withoutColon}"`;
     }
   }
 
   if (['javascript', 'typescript', 'tsx'].includes(lang)) {
     if (/^(export\s+)?(async\s+)?function\s+\$[A-Z_]+\s*$/i.test(src)) {
-      return `Hint: Function patterns need params and body. Try "function $NAME($$$) { $$$ }"`;
+      return `提示：函数模式需要参数和函数体。尝试 "function $NAME($$$) { $$$ }"`;
     }
   }
 

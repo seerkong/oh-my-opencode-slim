@@ -117,6 +117,9 @@ export function generateAntigravityMixedPreset(
     if (agentName === 'designer' && !skills.includes('agent-browser')) {
       skills.push('agent-browser');
     }
+    if (agentName === 'designer' && !skills.includes('playwright')) {
+      skills.push('playwright');
+    }
 
     return {
       model: modelInfo.model,
@@ -338,6 +341,9 @@ export function generateLiteConfig(
     // Special case for designer and agent-browser skill
     if (agentName === 'designer' && !skills.includes('agent-browser')) {
       skills.push('agent-browser');
+    }
+    if (agentName === 'designer' && !skills.includes('playwright')) {
+      skills.push('playwright');
     }
 
     return {

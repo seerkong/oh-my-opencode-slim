@@ -113,7 +113,12 @@ export const PresetSchema = z.record(z.string(), AgentOverrideConfigSchema);
 export type Preset = z.infer<typeof PresetSchema>;
 
 // MCP names
-export const McpNameSchema = z.enum(['websearch', 'context7', 'grep_app']);
+export const McpNameSchema = z.enum([
+  'websearch',
+  'context7',
+  'grep_app',
+  'playwright',
+]);
 export type McpName = z.infer<typeof McpNameSchema>;
 
 // Background task configuration
@@ -122,6 +127,14 @@ export const BackgroundTaskConfigSchema = z.object({
 });
 
 export type BackgroundTaskConfig = z.infer<typeof BackgroundTaskConfigSchema>;
+
+export const RalphLoopConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  default_max_iterations: z.number().min(1).max(1000).default(100),
+  state_dir: z.string().optional(),
+});
+
+export type RalphLoopConfig = z.infer<typeof RalphLoopConfigSchema>;
 
 export const FailoverConfigSchema = z.object({
   enabled: z.boolean().default(true),
@@ -142,6 +155,7 @@ export const PluginConfigSchema = z.object({
   disabled_mcps: z.array(z.string()).optional(),
   tmux: TmuxConfigSchema.optional(),
   background: BackgroundTaskConfigSchema.optional(),
+  ralph_loop: RalphLoopConfigSchema.optional(),
   fallback: FailoverConfigSchema.optional(),
 });
 

@@ -1,4 +1,12 @@
-import { describe, expect, mock, test } from 'bun:test';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  mock,
+  spyOn,
+  test,
+} from 'bun:test';
 import * as fs from 'node:fs';
 import { extractChannel, findPluginEntry, getLocalDevVersion } from './checker';
 
@@ -11,14 +19,25 @@ mock.module('./constants', () => ({
     '/mock/cache/node_modules/oh-my-opencode-slim/package.json',
 }));
 
-mock.module('node:fs', () => ({
-  existsSync: mock((_p: string) => false),
-  readFileSync: mock((_p: string) => ''),
-  statSync: mock((_p: string) => ({ isDirectory: () => true })),
-  writeFileSync: mock(() => {}),
-}));
-
 describe('auto-update-checker/checker', () => {
+  beforeEach(() => {
+    spyOn(fs, 'existsSync').mockImplementation((_p: fs.PathLike) => false);
+    spyOn(fs, 'readFileSync').mockImplementation(
+      (_p: fs.PathOrFileDescriptor) => '' as any,
+    );
+    spyOn(fs, 'statSync').mockImplementation(
+      (_p: fs.PathLike) => ({ isDirectory: () => true }) as any,
+    );
+    spyOn(fs, 'writeFileSync').mockImplementation(
+      (_p: fs.PathOrFileDescriptor, _data: string | NodeJS.ArrayBufferView) =>
+        undefined,
+    );
+  });
+
+  afterEach(() => {
+    mock.restore();
+  });
+
   describe('extractChannel', () => {
     test('returns latest for null or empty', () => {
       expect(extractChannel(null)).toBe('latest');

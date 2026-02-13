@@ -37,7 +37,7 @@ describe('grep tool', () => {
         filesSearched: 10,
         truncated: false,
       };
-      expect(formatGrepResult(result)).toBe('No matches found.');
+      expect(formatGrepResult(result)).toBe('未找到匹配项。');
     });
 
     test('formats error results', () => {
@@ -69,7 +69,7 @@ describe('grep tool', () => {
       expect(output).toContain('  15: console.log(foo)');
       expect(output).toContain('file2.ts:');
       expect(output).toContain("  5: import { foo } from './file1'");
-      expect(output).toContain('Found 3 matches in 2 files');
+      expect(output).toContain('在 2 个文件中找到 3 个匹配项');
     });
 
     test('indicates truncation', () => {
@@ -79,7 +79,7 @@ describe('grep tool', () => {
         filesSearched: 50,
         truncated: true,
       };
-      expect(formatGrepResult(result)).toContain('(output truncated)');
+      expect(formatGrepResult(result)).toContain('（输出已截断）');
     });
   });
 
@@ -197,8 +197,8 @@ describe('grep tool', () => {
       });
 
       expect(typeof result).toBe('string');
-      expect(result).toContain('Found');
-      expect(result).toContain('matches');
+      expect(result).toContain('找到');
+      expect(result).toContain('匹配项');
     });
 
     test('handles errors gracefully', async () => {

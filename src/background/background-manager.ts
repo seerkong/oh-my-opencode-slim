@@ -1,16 +1,15 @@
 /**
- * Background Task Manager
+ * 后台任务管理器
  *
- * Manages long-running AI agent tasks that execute in separate sessions.
- * Background tasks run independently from the main conversation flow, allowing
- * the user to continue working while tasks complete asynchronously.
+ * 管理在独立会话中执行的长时间运行的 AI 代理任务。
+ * 后台任务独立于主对话流运行，允许用户在任务异步完成时继续工作。
  *
- * Key features:
- * - Fire-and-forget launch (returns task_id immediately)
- * - Creates isolated sessions for background work
- * - Event-driven completion detection via session.status
- * - Start queue with configurable concurrency limit
- * - Supports task cancellation and result retrieval
+ * 主要功能：
+ * - 即发即忘启动（立即返回 task_id）
+ * - 为后台工作创建隔离会话
+ * - 通过 session.status 进行事件驱动的完成检测
+ * - 具有可配置并发限制的启动队列
+ * - 支持任务取消和结果检索
  */
 
 import type { PluginInput } from '@opencode-ai/plugin';
@@ -52,14 +51,14 @@ function parseModelReference(model: string): {
 }
 
 /**
- * Represents a background task running in an isolated session.
- * Tasks are tracked from creation through completion or failure.
+ * 表示在隔离会话中运行的后台任务。
+ * 任务从创建到完成或失败全程被跟踪。
  */
 export interface BackgroundTask {
-  id: string; // Unique task identifier (e.g., "bg_abc123")
-  sessionId?: string; // OpenCode session ID (set when starting)
-  description: string; // Human-readable task description
-  agent: string; // Agent name handling the task
+  id: string; // 唯一任务标识符（例如 "bg_abc123"）
+  sessionId?: string; // OpenCode 会话 ID（启动时设置）
+  description: string; // 人类可读的任务描述
+  agent: string; // 处理任务的代理名称
   status:
     | 'pending'
     | 'starting'
@@ -67,23 +66,23 @@ export interface BackgroundTask {
     | 'completed'
     | 'failed'
     | 'cancelled';
-  result?: string; // Final output from the agent (when completed)
-  error?: string; // Error message (when failed)
-  config: BackgroundTaskConfig; // Task configuration
-  parentSessionId: string; // Parent session ID for notifications
-  startedAt: Date; // Task creation timestamp
-  completedAt?: Date; // Task completion/failure timestamp
-  prompt: string; // Initial prompt
+  result?: string; // 代理的最终输出（完成时）
+  error?: string; // 错误消息（失败时）
+  config: BackgroundTaskConfig; // 任务配置
+  parentSessionId: string; // 用于通知的父会话 ID
+  startedAt: Date; // 任务创建时间戳
+  completedAt?: Date; // 任务完成/失败时间戳
+  prompt: string; // 初始提示
 }
 
 /**
- * Options for launching a new background task.
+ * 启动新后台任务的选项。
  */
 export interface LaunchOptions {
-  agent: string; // Agent to handle the task
-  prompt: string; // Initial prompt to send to the agent
-  description: string; // Human-readable task description
-  parentSessionId: string; // Parent session ID for task hierarchy
+  agent: string; // 处理任务的代理
+  prompt: string; // 发送给代理的初始提示
+  description: string; // 人类可读的任务描述
+  parentSessionId: string; // 用于任务层级的父会话 ID
 }
 
 function generateTaskId(): string {
@@ -93,7 +92,7 @@ function generateTaskId(): string {
 export class BackgroundTaskManager {
   private tasks = new Map<string, BackgroundTask>();
   private tasksBySessionId = new Map<string, string>();
-  // Track which agent type owns each session for delegation permission checks
+  // 跟踪每个会话所属的代理类型，用于委派权限检查
   private agentBySessionId = new Map<string, string>();
   private client: OpencodeClient;
   private directory: string;
@@ -101,12 +100,12 @@ export class BackgroundTaskManager {
   private config?: PluginConfig;
   private backgroundConfig: BackgroundTaskConfig;
 
-  // Start queue
+  // 启动队列
   private startQueue: BackgroundTask[] = [];
   private activeStarts = 0;
   private maxConcurrentStarts: number;
 
-  // Completion waiting
+  // 完成等待
   private completionResolvers = new Map<
     string,
     (task: BackgroundTask) => void
@@ -128,9 +127,8 @@ export class BackgroundTaskManager {
   }
 
   /**
-   * Look up the delegation rules for an agent type.
-   * Unknown agent types default to explorer-only access, making it easy
-   * to add new background agent types without updating SUBAGENT_DELEGATION_RULES.
+   * 查找代理类型的委派规则。
+   * 未知代理类型默认仅有 explorer 访问权限，便于添加新的后台代理类型而无需更新 SUBAGENT_DELEGATION_RULES。
    */
   private getSubagentRules(agentName: string): readonly string[] {
     return (
@@ -141,13 +139,13 @@ export class BackgroundTaskManager {
   }
 
   /**
-   * Check if a parent session is allowed to delegate to a specific agent type.
-   * @param parentSessionId - The session ID of the parent
-   * @param requestedAgent - The agent type being requested
-   * @returns true if allowed, false if not
+   * 检查父会话是否允许委派给特定代理类型。
+   * @param parentSessionId - 父会话的会话 ID
+   * @param requestedAgent - 请求的代理类型
+   * @returns 允许返回 true，否则返回 false
    */
   isAgentAllowed(parentSessionId: string, requestedAgent: string): boolean {
-    // Untracked sessions are the root orchestrator (created by OpenCode, not by us)
+    // 未跟踪的会话是根编排器（由 OpenCode 创建，而非由我们创建）
     const parentAgentName =
       this.agentBySessionId.get(parentSessionId) ?? 'orchestrator';
 
@@ -159,12 +157,12 @@ export class BackgroundTaskManager {
   }
 
   /**
-   * Get the list of allowed subagents for a parent session.
-   * @param parentSessionId - The session ID of the parent
-   * @returns Array of allowed agent names, empty if none
+   * 获取父会话允许的子代理列表。
+   * @param parentSessionId - 父会话的会话 ID
+   * @returns 允许的代理名称数组，无则为空
    */
   getAllowedSubagents(parentSessionId: string): readonly string[] {
-    // Untracked sessions are the root orchestrator (created by OpenCode, not by us)
+    // 未跟踪的会话是根编排器（由 OpenCode 创建，而非由我们创建）
     const parentAgentName =
       this.agentBySessionId.get(parentSessionId) ?? 'orchestrator';
 
@@ -172,13 +170,13 @@ export class BackgroundTaskManager {
   }
 
   /**
-   * Launch a new background task (fire-and-forget).
+   * 启动新的后台任务（即发即忘）。
    *
-   * Phase A (sync): Creates task record and returns immediately.
-   * Phase B (async): Session creation and prompt sending happen in background.
+   * 阶段 A（同步）：创建任务记录并立即返回。
+   * 阶段 B（异步）：会话创建和提示发送在后台进行。
    *
-   * @param opts - Task configuration options
-   * @returns The created background task with pending status
+   * @param opts - 任务配置选项
+   * @returns 创建的处于待处理状态的后台任务
    */
   launch(opts: LaunchOptions): BackgroundTask {
     const task: BackgroundTask = {
@@ -209,7 +207,7 @@ export class BackgroundTaskManager {
   }
 
   /**
-   * Enqueue task for background start.
+   * 将任务加入后台启动队列。
    */
   private enqueueStart(task: BackgroundTask): void {
     this.startQueue.push(task);
@@ -217,7 +215,7 @@ export class BackgroundTaskManager {
   }
 
   /**
-   * Process start queue with concurrency limit.
+   * 处理启动队列，遵循并发限制。
    */
   private processQueue(): void {
     while (
@@ -265,12 +263,12 @@ export class BackgroundTaskManager {
   }
 
   /**
-   * Calculate tool permissions for a spawned agent based on its own delegation rules.
-   * Agents that cannot delegate (leaf nodes) get delegation tools disabled entirely,
-   * preventing models from even seeing tools they can never use.
+   * 计算生成代理基于其自身委派规则的工具权限。
+   * 无法委派的代理（叶节点）将完全禁用委派工具，
+   * 防止模型看到它们永远无法使用的工具。
    *
-   * @param agentName - The agent type being spawned
-   * @returns Tool permissions object with background_task and task enabled/disabled
+   * @param agentName - 正在生成的代理类型
+   * @returns 包含 background_task 和 task 启用/禁用状态的工具权限对象
    */
   private calculateToolPermissions(agentName: string): {
     background_task: boolean;
@@ -290,7 +288,7 @@ export class BackgroundTaskManager {
   }
 
   /**
-   * Start a task in the background (Phase B).
+   * 在后台启动任务（阶段 B）。
    */
   private async startTask(task: BackgroundTask): Promise<void> {
     task.status = 'starting';
@@ -314,7 +312,7 @@ export class BackgroundTaskManager {
       });
 
       if (!session.data?.id) {
-        throw new Error('Failed to create background session');
+        throw new Error('创建后台会话失败');
       }
 
       task.sessionId = session.data.id;
@@ -361,7 +359,7 @@ export class BackgroundTaskManager {
           if (model) {
             const ref = parseModelReference(model);
             if (!ref) {
-              throw new Error(`Invalid fallback model format: ${model}`);
+              throw new Error(`无效的备用模型格式：${model}`);
             }
             body.model = ref;
           }
@@ -388,7 +386,7 @@ export class BackgroundTaskManager {
       }
 
       if (!succeeded) {
-        throw new Error(`All fallback models failed. ${errors.join(' | ')}`);
+        throw new Error(`所有备用模型均失败。${errors.join(' | ')}`);
       }
 
       log(`[background-manager] task started: ${task.id}`, {
@@ -405,8 +403,8 @@ export class BackgroundTaskManager {
   }
 
   /**
-   * Handle session.status events for completion detection.
-   * Uses session.status instead of deprecated session.idle.
+   * 处理 session.status 事件以检测完成。
+   * 使用 session.status 替代已弃用的 session.idle。
    */
   async handleSessionStatus(event: {
     type: string;
@@ -430,7 +428,7 @@ export class BackgroundTaskManager {
   }
 
   /**
-   * Extract task result and mark complete.
+   * 提取任务结果并标记为完成。
    */
   private async extractAndCompleteTask(task: BackgroundTask): Promise<void> {
     if (!task.sessionId) return;
@@ -466,7 +464,7 @@ export class BackgroundTaskManager {
       if (responseText) {
         this.completeTask(task, 'completed', responseText);
       } else {
-        this.completeTask(task, 'completed', '(No output)');
+        this.completeTask(task, 'completed', '（无输出）');
       }
     } catch (error) {
       this.completeTask(
@@ -478,7 +476,7 @@ export class BackgroundTaskManager {
   }
 
   /**
-   * Complete a task and notify waiting callers.
+   * 完成任务并通知等待的调用者。
    */
   private completeTask(
     task: BackgroundTask,
@@ -525,15 +523,15 @@ export class BackgroundTaskManager {
   }
 
   /**
-   * Send completion notification to parent session.
+   * 向父会话发送完成通知。
    */
   private async sendCompletionNotification(
     task: BackgroundTask,
   ): Promise<void> {
     const message =
       task.status === 'completed'
-        ? `[Background task "${task.description}" completed]`
-        : `[Background task "${task.description}" failed: ${task.error}]`;
+        ? `[后台任务 "${task.description}" 已完成]`
+        : `[后台任务 "${task.description}" 失败：${task.error}]`;
 
     await this.client.session.prompt({
       path: { id: task.parentSessionId },
@@ -544,21 +542,21 @@ export class BackgroundTaskManager {
   }
 
   /**
-   * Retrieve the current state of a background task.
+   * 检索后台任务的当前状态。
    *
-   * @param taskId - The task ID to retrieve
-   * @returns The task object, or null if not found
+   * @param taskId - 要检索的任务 ID
+   * @returns 任务对象，未找到则返回 null
    */
   getResult(taskId: string): BackgroundTask | null {
     return this.tasks.get(taskId) ?? null;
   }
 
   /**
-   * Wait for a task to complete.
+   * 等待任务完成。
    *
-   * @param taskId - The task ID to wait for
-   * @param timeout - Maximum time to wait in milliseconds (0 = no timeout)
-   * @returns The completed task, or null if not found/timeout
+   * @param taskId - 要等待的任务 ID
+   * @param timeout - 最大等待时间（毫秒，0 = 无超时）
+   * @returns 已完成的任务，未找到/超时则返回 null
    */
   async waitForCompletion(
     taskId: string,
@@ -589,10 +587,10 @@ export class BackgroundTaskManager {
   }
 
   /**
-   * Cancel one or all running background tasks.
+   * 取消一个或所有运行中的后台任务。
    *
-   * @param taskId - Optional task ID to cancel. If omitted, cancels all pending/running tasks.
-   * @returns Number of tasks cancelled
+   * @param taskId - 可选的要取消的任务 ID。如果省略，取消所有待处理/运行中的任务。
+   * @returns 已取消的任务数量
    */
   cancel(taskId?: string): number {
     if (taskId) {
@@ -621,7 +619,7 @@ export class BackgroundTaskManager {
           }
         }
 
-        this.completeTask(task, 'cancelled', 'Cancelled by user');
+        this.completeTask(task, 'cancelled', '被用户取消');
         return 1;
       }
       return 0;
@@ -652,7 +650,7 @@ export class BackgroundTaskManager {
           }
         }
 
-        this.completeTask(task, 'cancelled', 'Cancelled by user');
+        this.completeTask(task, 'cancelled', '被用户取消');
         count++;
       }
     }
@@ -660,7 +658,7 @@ export class BackgroundTaskManager {
   }
 
   /**
-   * Clean up all tasks.
+   * 清理所有任务。
    */
   cleanup(): void {
     this.startQueue = [];

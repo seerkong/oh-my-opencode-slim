@@ -13,10 +13,10 @@ import { PACKAGE_NAME } from './constants';
 import type { AutoUpdateCheckerOptions } from './types';
 
 /**
- * Creates an OpenCode hook that checks for plugin updates when a new session is created.
- * @param ctx The plugin input context.
- * @param options Configuration options for the update checker.
- * @returns A hook object for the session.created event.
+ * 创建一个 OpenCode 钩子，在新会话创建时检查插件更新。
+ * @param ctx 插件输入上下文。
+ * @param options 更新检查器的配置选项。
+ * @returns 用于 session.created 事件的钩子对象。
  */
 export function createAutoUpdateCheckerHook(
   ctx: PluginInput,
@@ -48,7 +48,7 @@ export function createAutoUpdateCheckerHook(
             showToast(
               ctx,
               `OMO-Slim ${displayVersion} (dev)`,
-              'Running in local development mode.',
+              '正在本地开发模式下运行。',
               'info',
             );
           }
@@ -60,7 +60,7 @@ export function createAutoUpdateCheckerHook(
           showToast(
             ctx,
             `OMO-Slim ${displayVersion ?? 'unknown'}`,
-            'oh-my-opencode-slim is active.',
+            'oh-my-opencode-slim 已激活。',
             'info',
           );
         }
@@ -74,9 +74,9 @@ export function createAutoUpdateCheckerHook(
 }
 
 /**
- * Orchestrates the version comparison and update process in the background.
- * @param ctx The plugin input context.
- * @param autoUpdate Whether to automatically install updates.
+ * 在后台协调版本比较和更新流程。
+ * @param ctx 插件输入上下文。
+ * @param autoUpdate 是否自动安装更新。
  */
 async function runBackgroundUpdateCheck(
   ctx: PluginInput,
@@ -121,7 +121,7 @@ async function runBackgroundUpdateCheck(
     showToast(
       ctx,
       `OMO-Slim ${latestVersion}`,
-      `v${latestVersion} available. Restart to apply.`,
+      `v${latestVersion} 可用。重启以应用更新。`,
       'info',
       8000,
     );
@@ -139,7 +139,7 @@ async function runBackgroundUpdateCheck(
       showToast(
         ctx,
         `OMO-Slim ${latestVersion}`,
-        `v${latestVersion} available. Restart to apply.`,
+        `v${latestVersion} 可用。重启以应用更新。`,
         'info',
         8000,
       );
@@ -158,8 +158,8 @@ async function runBackgroundUpdateCheck(
   if (installSuccess) {
     showToast(
       ctx,
-      'OMO-Slim Updated!',
-      `v${currentVersion} → v${latestVersion}\nRestart OpenCode to apply.`,
+      'OMO-Slim 已更新！',
+      `v${currentVersion} → v${latestVersion}\n重启 OpenCode 以应用更新。`,
       'success',
       8000,
     );
@@ -170,7 +170,7 @@ async function runBackgroundUpdateCheck(
     showToast(
       ctx,
       `OMO-Slim ${latestVersion}`,
-      `v${latestVersion} available. Restart to apply.`,
+      `v${latestVersion} 可用。重启以应用更新。`,
       'info',
       8000,
     );
@@ -179,10 +179,10 @@ async function runBackgroundUpdateCheck(
 }
 
 /**
- * Spawns a background process to run 'bun install'.
- * Includes a 60-second timeout to prevent stalling OpenCode.
- * @param ctx The plugin input context.
- * @returns True if the installation succeeded within the timeout.
+ * 启动后台进程运行 'bun install'。
+ * 包含 60 秒超时以防止阻塞 OpenCode。
+ * @param ctx 插件输入上下文。
+ * @returns 如果安装在超时内成功则返回 true。
  */
 async function runBunInstallSafe(ctx: PluginInput): Promise<boolean> {
   try {
@@ -215,12 +215,12 @@ async function runBunInstallSafe(ctx: PluginInput): Promise<boolean> {
 }
 
 /**
- * Helper to display a toast notification in the OpenCode TUI.
- * @param ctx The plugin input context.
- * @param title The toast title.
- * @param message The toast message.
- * @param variant The visual style of the toast.
- * @param duration How long to show the toast in milliseconds.
+ * 在 OpenCode TUI 中显示 toast 通知的辅助函数。
+ * @param ctx 插件输入上下文。
+ * @param title toast 标题。
+ * @param message toast 消息。
+ * @param variant toast 的视觉样式。
+ * @param duration toast 显示时长（毫秒）。
  */
 function showToast(
   ctx: PluginInput,

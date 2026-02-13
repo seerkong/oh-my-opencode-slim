@@ -1,6 +1,7 @@
 import type { McpName } from '../config';
 import { context7 } from './context7';
 import { grep_app } from './grep-app';
+import { playwright } from './playwright';
 import type { McpConfig } from './types';
 import { websearch } from './websearch';
 
@@ -10,6 +11,7 @@ const allBuiltinMcps: Record<McpName, McpConfig> = {
   websearch,
   context7,
   grep_app,
+  playwright,
 };
 
 /**

@@ -43,6 +43,16 @@ export const RECOMMENDED_SKILLS: RecommendedSkill[] = [
   },
 ];
 
+const DEFAULT_ROLE_SKILLS: Array<{
+  skillName: string;
+  allowedAgents: string[];
+}> = [
+  {
+    skillName: 'playwright',
+    allowedAgents: ['designer', 'orchestrator'],
+  },
+];
+
 /**
  * Install a skill using `npx skills add`.
  * @param skill - The skill to install
@@ -119,6 +129,15 @@ export function getSkillPermissionsForAgent(
 
   // Otherwise, use recommended defaults
   for (const skill of RECOMMENDED_SKILLS) {
+    const isAllowed =
+      skill.allowedAgents.includes('*') ||
+      skill.allowedAgents.includes(agentName);
+    if (isAllowed) {
+      permissions[skill.skillName] = 'allow';
+    }
+  }
+
+  for (const skill of DEFAULT_ROLE_SKILLS) {
     const isAllowed =
       skill.allowedAgents.includes('*') ||
       skill.allowedAgents.includes(agentName);

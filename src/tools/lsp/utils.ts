@@ -64,15 +64,15 @@ export function formatServerLookupError(
 ): string {
   if (result.status === 'not_installed') {
     return [
-      `LSP server '${result.server.id}' is NOT INSTALLED.`,
+      `LSP 服务器 '${result.server.id}' 未安装。`,
       ``,
-      `Command not found: ${result.server.command[0]}`,
+      `未找到命令：${result.server.command[0]}`,
       ``,
-      `To install: ${result.installHint}`,
+      `安装方式：${result.installHint}`,
     ].join('\n');
   }
 
-  return `No LSP server configured for extension: ${result.extension}`;
+  return `未配置该扩展名的 LSP 服务器：${result.extension}`;
 }
 
 export async function withLspClient<T>(
@@ -97,9 +97,7 @@ export async function withLspClient<T>(
     if (e instanceof Error && e.message.includes('timeout')) {
       const isInitializing = lspManager.isServerInitializing(root, server.id);
       if (isInitializing) {
-        throw new Error(
-          `LSP server is still initializing. Please retry in a few seconds.`,
-        );
+        throw new Error(`LSP 服务器仍在初始化中。请稍后重试。`);
       }
     }
     throw e;
@@ -225,7 +223,7 @@ export function applyWorkspaceEdit(edit: WorkspaceEdit | null): ApplyResult {
       success: false,
       filesModified: [],
       totalEdits: 0,
-      errors: ['No edit provided'],
+      errors: ['未提供编辑内容'],
     };
   }
 
@@ -308,18 +306,18 @@ export function formatApplyResult(result: ApplyResult): string {
 
   if (result.success) {
     lines.push(
-      `Applied ${result.totalEdits} edit(s) to ${result.filesModified.length} file(s):`,
+      `已将 ${result.totalEdits} 处编辑应用到 ${result.filesModified.length} 个文件：`,
     );
     for (const file of result.filesModified) {
       lines.push(`  - ${file}`);
     }
   } else {
-    lines.push('Failed to apply some changes:');
+    lines.push('部分更改应用失败：');
     for (const err of result.errors) {
-      lines.push(`  Error: ${err}`);
+      lines.push(`  错误：${err}`);
     }
     if (result.filesModified.length > 0) {
-      lines.push(`Successfully modified: ${result.filesModified.join(', ')}`);
+      lines.push(`已成功修改：${result.filesModified.join(', ')}`);
     }
   }
 

@@ -1,10 +1,9 @@
 /**
- * Post-Read nudge - appends a delegation reminder after file reads.
- * Catches the "read files → implement myself" anti-pattern.
+ * 读取后提醒 - 在文件读取后追加委派提醒。
+ * 捕获"读取文件→自己实现"的反模式。
  */
 
-const NUDGE =
-  '\n\n---\nReminder to follow the workflow instructions, consider delegation to specialist(s)';
+const NUDGE = '\n\n---\n请遵循工作流指令，考虑委派给专家';
 
 interface ToolExecuteAfterInput {
   tool: string;

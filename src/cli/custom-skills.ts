@@ -29,6 +29,13 @@ export interface CustomSkill {
  */
 export const CUSTOM_SKILLS: CustomSkill[] = [
   {
+    name: 'playwright',
+    description:
+      'Browser automation via Playwright MCP for web interactions and testing',
+    allowedAgents: ['designer', 'orchestrator'],
+    sourcePath: 'src/skills/playwright',
+  },
+  {
     name: 'cartography',
     description: 'Repository understanding and hierarchical codemap generation',
     allowedAgents: ['orchestrator'],

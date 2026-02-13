@@ -11,12 +11,12 @@ import type { TmuxConfig } from '../config/schema';
 const z = tool.schema;
 
 /**
- * Creates background task management tools for the plugin.
- * @param _ctx - Plugin input context
- * @param manager - Background task manager for launching and tracking tasks
- * @param _tmuxConfig - Optional tmux configuration for session management
- * @param _pluginConfig - Optional plugin configuration for agent variants
- * @returns Object containing background_task, background_output, and background_cancel tools
+ * 为插件创建后台任务管理工具。
+ * @param _ctx - 插件输入上下文
+ * @param manager - 用于启动和跟踪任务的后台任务管理器
+ * @param _tmuxConfig - 可选的 tmux 会话管理配置
+ * @param _pluginConfig - 可选的插件代理变体配置
+ * @returns 包含 background_task、background_output 和 background_cancel 工具的对象
  */
 export function createBackgroundTools(
   _ctx: PluginInput,
@@ -28,21 +28,19 @@ export function createBackgroundTools(
 
   // Tool for launching agent tasks (fire-and-forget)
   const background_task = tool({
-    description: `Launch background agent task. Returns task_id immediately.
+    description: `启动后台代理任务。立即返回 task_id。
 
-Flow: launch → wait for automatic notification when complete.
+流程：启动 → 等待任务完成时的自动通知。
 
-Key behaviors:
-- Fire-and-forget: returns task_id in ~1ms
-- Parallel: up to 10 concurrent tasks
-- Auto-notify: parent session receives result when task completes`,
+关键行为：
+- 即发即忘：约 1ms 内返回 task_id
+- 并行：最多 10 个并发任务
+- 自动通知：任务完成时父会话收到结果`,
 
     args: {
-      description: z
-        .string()
-        .describe('Short description of the task (5-10 words)'),
-      prompt: z.string().describe('The task prompt for the agent'),
-      agent: z.string().describe(`Agent to use: ${agentNames}`),
+      description: z.string().describe('任务的简短描述（5-10 个词）'),
+      prompt: z.string().describe('发送给代理的任务提示'),
+      agent: z.string().describe(`使用的代理：${agentNames}`),
     },
     async execute(args, toolContext) {
       if (
@@ -50,7 +48,7 @@ Key behaviors:
         typeof toolContext !== 'object' ||
         !('sessionID' in toolContext)
       ) {
-        throw new Error('Invalid toolContext: missing sessionID');
+        throw new Error('无效的 toolContext：缺少 sessionID');
       }
 
       const agent = String(args.agent);
@@ -61,7 +59,7 @@ Key behaviors:
       // Validate agent against delegation rules
       if (!manager.isAgentAllowed(parentSessionId, agent)) {
         const allowed = manager.getAllowedSubagents(parentSessionId);
-        return `Agent '${agent}' is not allowed. Allowed agents: ${allowed.join(', ')}`;
+        return `不允许使用代理 '${agent}'。允许的代理：${allowed.join(', ')}`;
       }
 
       // Fire-and-forget launch
@@ -72,31 +70,31 @@ Key behaviors:
         parentSessionId,
       });
 
-      return `Background task launched.
+      return `后台任务已启动。
 
-Task ID: ${task.id}
-Agent: ${agent}
-Status: ${task.status}
+任务 ID：${task.id}
+代理：${agent}
+状态：${task.status}
 
-Use \`background_output\` with task_id="${task.id}" to get results.`;
+使用 \`background_output\` 并传入 task_id="${task.id}" 获取结果。`;
     },
   });
 
   // Tool for retrieving output from background tasks
   const background_output = tool({
-    description: `Get background task results after completion notification received.
+    description: `获取后台任务完成通知后的结果。
 
-timeout=0: returns status immediately (no wait)
-timeout=N: waits up to N ms for completion
+timeout=0：立即返回状态（不等待）
+timeout=N：最多等待 N 毫秒直到完成
 
-Returns: results if completed, error if failed, status if running.`,
+返回：已完成则返回结果，失败则返回错误，运行中则返回状态。`,
 
     args: {
-      task_id: z.string().describe('Task ID from background_task'),
+      task_id: z.string().describe('来自 background_task 的任务 ID'),
       timeout: z
         .number()
         .optional()
-        .describe('Wait for completion (in ms, 0=no wait, default: 0)'),
+        .describe('等待完成（毫秒，0=不等待，默认：0）'),
     },
     async execute(args) {
       const taskId = String(args.task_id);
@@ -117,7 +115,7 @@ Returns: results if completed, error if failed, status if running.`,
       }
 
       if (!task) {
-        return `Task not found: ${taskId}`;
+        return `未找到任务：${taskId}`;
       }
 
       // Calculate task duration
@@ -140,9 +138,9 @@ Returns: results if completed, error if failed, status if running.`,
       } else if (task.status === 'failed') {
         output += `Error: ${task.error}`;
       } else if (task.status === 'cancelled') {
-        output += '(Task cancelled)';
+        output += '（任务已取消）';
       } else {
-        output += '(Task still running)';
+        output += '（任务仍在运行）';
       }
 
       return output;
@@ -151,32 +149,32 @@ Returns: results if completed, error if failed, status if running.`,
 
   // Tool for canceling running background tasks
   const background_cancel = tool({
-    description: `Cancel background task(s).
+    description: `取消后台任务。
 
-task_id: cancel specific task
-all=true: cancel all running tasks
+task_id：取消指定任务
+all=true：取消所有运行中的任务
 
-Only cancels pending/starting/running tasks.`,
+仅取消待处理/启动中/运行中的任务。`,
     args: {
-      task_id: z.string().optional().describe('Specific task to cancel'),
-      all: z.boolean().optional().describe('Cancel all running tasks'),
+      task_id: z.string().optional().describe('要取消的指定任务'),
+      all: z.boolean().optional().describe('取消所有运行中的任务'),
     },
     async execute(args) {
       // Cancel all running tasks if requested
       if (args.all === true) {
         const count = manager.cancel();
-        return `Cancelled ${count} task(s).`;
+        return `已取消 ${count} 个任务。`;
       }
 
       // Cancel specific task if task_id provided
       if (typeof args.task_id === 'string') {
         const count = manager.cancel(args.task_id);
         return count > 0
-          ? `Cancelled task ${args.task_id}.`
-          : `Task ${args.task_id} not found or not running.`;
+          ? `已取消任务 ${args.task_id}。`
+          : `任务 ${args.task_id} 未找到或未在运行。`;
       }
 
-      return 'Specify task_id or use all=true.';
+      return '请指定 task_id 或使用 all=true。';
     },
   });
 

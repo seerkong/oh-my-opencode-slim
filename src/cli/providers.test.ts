@@ -257,6 +257,7 @@ describe('providers', () => {
 
     // Designer should have 'agent-browser'
     expect(agents.designer.skills).toContain('agent-browser');
+    expect(agents.designer.skills).toContain('playwright');
 
     // Fixer should have no skills by default (empty recommended list)
     expect(agents.fixer.skills).toEqual([]);
@@ -343,7 +344,7 @@ describe('providers', () => {
     expect(agents.librarian.mcps).toContain('websearch');
     expect(agents.librarian.mcps).toContain('context7');
     expect(agents.librarian.mcps).toContain('grep_app');
-    expect(agents.designer.mcps).toEqual([]);
+    expect(agents.designer.mcps).toEqual(['playwright']);
   });
 
   // Antigravity tests

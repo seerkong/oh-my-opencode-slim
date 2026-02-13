@@ -16,6 +16,7 @@ describe('skills permissions', () => {
     // Designer should have agent-browser allowed
     const designerPerms = getSkillPermissionsForAgent('designer');
     expect(designerPerms['agent-browser']).toBe('allow');
+    expect(designerPerms.playwright).toBe('allow');
 
     // Developer (orchestrator) should have simplify allowed (and everything else via *)
     const orchPerms = getSkillPermissionsForAgent('orchestrator');
