@@ -4,7 +4,7 @@ import { getTextFromChatParts, parseRalphCommand } from './ralph-parser';
 describe('ralph-parser', () => {
   test('parses slash ralph-loop command with options', () => {
     const cmd = parseRalphCommand(
-      '/ralph-loop "Build auth flow" --max-iterations=12 --completion-promise=FIN --yield-promise=WAIT --resume-mode=file --resume-file=.sisyphus/custom.md',
+      '/ralph-loop "Build auth flow" --max-iterations=12 --completion-promise=FIN --yield-promise=WAIT --resume-mode=file --resume-file=.eidolon/custom.md',
     );
 
     expect(cmd?.type).toBe('start');
@@ -14,7 +14,7 @@ describe('ralph-parser', () => {
     expect(cmd.completionPromise).toBe('FIN');
     expect(cmd.yieldPromise).toBe('WAIT');
     expect(cmd.resumeMode).toBe('file');
-    expect(cmd.resumeFile).toBe('.sisyphus/custom.md');
+    expect(cmd.resumeFile).toBe('.eidolon/custom.md');
   });
 
   test('parses slash ulw-loop command', () => {
@@ -36,13 +36,13 @@ describe('ralph-parser', () => {
 
   test('parses resume command with payload and file', () => {
     const cmd = parseRalphCommand(
-      '/ralph-resume "approved, proceed" --resume-file=.sisyphus/next.md',
+      '/ralph-resume "approved, proceed" --resume-file=.eidolon/next.md',
     );
 
     expect(cmd?.type).toBe('resume');
     if (cmd?.type !== 'resume') return;
     expect(cmd.payload).toBe('approved, proceed');
-    expect(cmd.resumeFile).toBe('.sisyphus/next.md');
+    expect(cmd.resumeFile).toBe('.eidolon/next.md');
   });
 
   test('parses ralph-loop template payload', () => {
@@ -67,14 +67,14 @@ describe('ralph-parser', () => {
   test('parses resume template payload', () => {
     const input = `Resume a suspended Ralph Loop.
 <resume-args>
-"continue with reviewer feedback" --resume-file=.sisyphus/ralph-resume.md
+"continue with reviewer feedback" --resume-file=.eidolon/ralph-resume.md
 </resume-args>`;
 
     const cmd = parseRalphCommand(input);
     expect(cmd?.type).toBe('resume');
     if (cmd?.type !== 'resume') return;
     expect(cmd.payload).toBe('continue with reviewer feedback');
-    expect(cmd.resumeFile).toBe('.sisyphus/ralph-resume.md');
+    expect(cmd.resumeFile).toBe('.eidolon/ralph-resume.md');
   });
 
   test('returns null for unrelated text', () => {

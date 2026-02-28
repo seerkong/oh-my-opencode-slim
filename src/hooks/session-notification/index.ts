@@ -8,3 +8,11 @@ export {
   resetNotifyBackendCache,
   sendNotification,
 } from './notify';
+export {
+  createIdleNotificationScheduler,
+  type IdleNotificationConfig,
+} from './scheduler';
+export {
+  normalizeSessionStatusToIdle,
+  pruneRecentIdles,
+} from './session-status-normalizer';

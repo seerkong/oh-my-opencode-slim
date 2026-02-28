@@ -129,12 +129,21 @@ export const BackgroundTaskConfigSchema = z.object({
 export type BackgroundTaskConfig = z.infer<typeof BackgroundTaskConfigSchema>;
 
 export const RalphLoopConfigSchema = z.object({
-  enabled: z.boolean().default(false),
+  enabled: z.boolean().default(true),
   default_max_iterations: z.number().min(1).max(1000).default(100),
   state_dir: z.string().optional(),
 });
 
 export type RalphLoopConfig = z.infer<typeof RalphLoopConfigSchema>;
+
+export const SessionNotificationConfigSchema = z.object({
+  backoffMultiplier: z.number().min(1).optional(),
+  maxIdleConfirmationDelay: z.number().min(1).optional(),
+});
+
+export type SessionNotificationConfig = z.infer<
+  typeof SessionNotificationConfigSchema
+>;
 
 export const FailoverConfigSchema = z.object({
   enabled: z.boolean().default(true),
@@ -156,6 +165,7 @@ export const PluginConfigSchema = z.object({
   tmux: TmuxConfigSchema.optional(),
   background: BackgroundTaskConfigSchema.optional(),
   ralph_loop: RalphLoopConfigSchema.optional(),
+  session_notification: SessionNotificationConfigSchema.optional(),
   fallback: FailoverConfigSchema.optional(),
 });
 

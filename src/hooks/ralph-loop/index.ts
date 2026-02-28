@@ -51,6 +51,8 @@ interface OpenCodeSessionMessage {
 
 const CONTINUATION_PROMPT = `[系统指令：OH-MY-OPENCODE - RALPH LOOP {{ITERATION}}/{{MAX}}]
 
+你上一次的尝试没有输出完成承诺标记。继续处理任务。
+
 预检（强制执行）：
 在开始任何工作之前，判断你是否被外部输入阻塞。
 
@@ -65,9 +67,11 @@ const CONTINUATION_PROMPT = `[系统指令：OH-MY-OPENCODE - RALPH LOOP {{ITERA
 - 立即停止。不要运行工具。不要继续工作。
 
 如果未阻塞：
+重要：
 - 回顾你目前的进展
 - 从上次中断的地方继续
 - 当完全完成时，输出：<promise>{{PROMISE}}</promise>
+- 在任务真正完成之前不要停止
 
 原始任务：
 {{PROMPT}}`;
@@ -84,7 +88,7 @@ const RESUME_PROMPT = `[RALPH LOOP - 恢复]
 继续原始任务：
 {{PROMPT}}`;
 
-const DEFAULT_API_TIMEOUT = 3000;
+const DEFAULT_API_TIMEOUT = 5000;
 
 type ResumeMode = 'user' | 'file';
 
@@ -115,6 +119,139 @@ function ensureDirForFile(filePath: string): void {
   const dir = dirname(filePath);
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true });
+  }
+}
+
+/**
+ * Promise.race 超时包装器。超时后 reject，并在 finally 中清理定时器。
+ * 参考 oh-my-opencode: src/hooks/ralph-loop/with-timeout.ts
+ */
+async function withTimeout<TData>(
+  promise: Promise<TData>,
+  timeoutMs: number,
+): Promise<TData> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error('API timeout'));
+    }, timeoutMs);
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeoutId !== undefined) {
+      clearTimeout(timeoutId);
+    }
+  }
+}
+
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function buildPromisePattern(promise: string): RegExp {
+  return new RegExp(`<promise>\\s*${escapeRegex(promise)}\\s*</promise>`, 'is');
+}
+
+/**
+ * 在 transcript JSONL 文件中检测完成承诺。
+ * 跳过 type === "user" 的条目，避免模板中的 <promise> 标签误触发。
+ * 参考 oh-my-opencode: src/hooks/ralph-loop/completion-promise-detector.ts
+ */
+function detectCompletionInTranscript(
+  transcriptPath: string | undefined,
+  promise: string,
+): boolean {
+  if (!transcriptPath) return false;
+
+  try {
+    if (!existsSync(transcriptPath)) return false;
+
+    const content = readFileSync(transcriptPath, 'utf-8');
+    const pattern = buildPromisePattern(promise);
+    const lines = content.split('\n').filter((line) => line.trim());
+
+    for (const line of lines) {
+      try {
+        const entry = JSON.parse(line) as { type?: string };
+        // 跳过 user 消息，避免模板中的 <promise> 标签误触发
+        if (entry.type === 'user') continue;
+        if (pattern.test(line)) return true;
+      } catch {}
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 通过 API 在会话消息中检测完成/挂起承诺。
+ * 只检查最后 3 条 assistant 消息，只拼接 type === "text" 的 part
+ * （跳过 reasoning 部分），防止 false positive。
+ * 参考 oh-my-opencode: src/hooks/ralph-loop/completion-promise-detector.ts
+ */
+async function detectPromiseInSessionMessages(
+  ctx: PluginInput,
+  options: {
+    sessionID: string;
+    apiTimeoutMs: number;
+  },
+): Promise<string | null> {
+  try {
+    const response = await withTimeout(
+      ctx.client.session.messages({
+        path: { id: options.sessionID },
+      }),
+      options.apiTimeoutMs,
+    );
+
+    const messagesResponse: unknown = response;
+    const responseData =
+      typeof messagesResponse === 'object' &&
+      messagesResponse !== null &&
+      'data' in messagesResponse
+        ? (messagesResponse as { data?: unknown }).data
+        : undefined;
+
+    const messageArray: unknown[] = Array.isArray(messagesResponse)
+      ? messagesResponse
+      : Array.isArray(responseData)
+        ? responseData
+        : [];
+
+    const assistantMessages = (messageArray as OpenCodeSessionMessage[]).filter(
+      (msg) => msg.info?.role === 'assistant',
+    );
+    if (assistantMessages.length === 0) return null;
+
+    // 只检查最后 3 条 assistant 消息
+    const recentAssistants = assistantMessages.slice(-3);
+    for (const assistant of recentAssistants) {
+      if (!assistant.parts) continue;
+
+      // 只拼接 type === "text" 的 part，跳过 reasoning 等
+      let responseText = '';
+      for (const part of assistant.parts) {
+        if (part.type !== 'text') continue;
+        responseText += `${responseText ? '\n' : ''}${part.text ?? ''}`;
+      }
+
+      const promiseValue = getLastPromiseValue(responseText);
+      if (promiseValue) return promiseValue;
+    }
+
+    return null;
+  } catch (err) {
+    setTimeout(() => {
+      log(`[${HOOK_NAME}] Session messages check failed`, {
+        sessionID: options.sessionID,
+        error: String(err),
+      });
+    }, 0);
+    return null;
   }
 }
 
@@ -268,43 +405,54 @@ async function getLatestUserMessageText(
   }
 }
 
-async function getLastAssistantText(
+/**
+ * 从会话消息中解析 agent 和 model 信息，用于注入时保留原始配置。
+ * 参考 oh-my-opencode: src/hooks/ralph-loop/continuation-prompt-injector.ts
+ */
+async function resolveSessionAgentAndModel(
   ctx: PluginInput,
   sessionID: string,
   apiTimeout: number,
-): Promise<string | null> {
+): Promise<{
+  agent?: string;
+  model?: { providerID: string; modelID: string };
+}> {
   try {
-    const response = await Promise.race([
+    const messagesResp = await withTimeout(
       ctx.client.session.messages({
         path: { id: sessionID },
       }),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('API timeout')), apiTimeout),
-      ),
-    ]);
-
-    const messages = (response as { data?: unknown[] }).data ?? [];
-    if (!Array.isArray(messages)) return null;
-
-    const assistantMessages = (messages as OpenCodeSessionMessage[]).filter(
-      (msg) => msg.info?.role === 'assistant',
+      apiTimeout,
     );
-    const lastAssistant = assistantMessages[assistantMessages.length - 1];
-    if (!lastAssistant?.parts) return null;
-
-    const responseText = lastAssistant.parts
-      .filter((p) => p.type === 'text')
-      .map((p) => p.text ?? '')
-      .join('\n');
-
-    return responseText;
-  } catch (err) {
-    log(`[${HOOK_NAME}] Session messages check failed`, {
-      sessionID,
-      error: String(err),
-    });
-    return null;
+    const messages = ((messagesResp as { data?: unknown[] }).data ??
+      []) as Array<{
+      info?: {
+        agent?: string;
+        model?: { providerID: string; modelID: string };
+        modelID?: string;
+        providerID?: string;
+      };
+    }>;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const info = messages[i]?.info;
+      if (info?.agent || info?.model || (info?.modelID && info?.providerID)) {
+        return {
+          agent: info.agent,
+          model:
+            info.model ??
+            (info.providerID && info.modelID
+              ? {
+                  providerID: info.providerID,
+                  modelID: info.modelID,
+                }
+              : undefined),
+        };
+      }
+    }
+  } catch {
+    // API 失败时无法获取 agent/model，继续使用默认值
   }
+  return {};
 }
 
 export interface RalphLoopHook {
@@ -591,72 +739,99 @@ export function createRalphLoopHook(
         return;
       }
 
-      const lastAssistantText = await getLastAssistantText(
-        ctx,
-        sessionID,
-        apiTimeout,
+      // --- 双路径完成检测 ---
+      // 路径 1: 尝试 transcript 文件（快速，无 API 调用）
+      const transcriptPath = options?.getTranscriptPath?.(sessionID);
+      const completionInTranscript = detectCompletionInTranscript(
+        transcriptPath,
+        state.completion_promise,
       );
-      if (lastAssistantText) {
-        const lastPromise = getLastPromiseValue(lastAssistantText);
-        if (lastPromise) {
-          const completion = state.completion_promise;
-          const yieldPromise = state.yield_promise ?? DEFAULT_YIELD_PROMISE;
 
-          if (lastPromise.trim() === completion) {
-            log(`[${HOOK_NAME}] Completion detected!`, {
-              sessionID,
-              iteration: state.iteration,
-              promise: completion,
-              detectedVia: 'session_messages_api',
-            });
-            clearState(ctx.directory, stateDir);
+      if (completionInTranscript) {
+        log(`[${HOOK_NAME}] Completion detected!`, {
+          sessionID,
+          iteration: state.iteration,
+          promise: state.completion_promise,
+          detectedVia: 'transcript_file',
+        });
+        clearState(ctx.directory, stateDir);
 
-            const title = state.ultrawork
-              ? 'ULTRAWORK 循环完成！'
-              : 'Ralph 循环完成！';
-            const message = state.ultrawork
-              ? `ULW ULW！任务在 ${state.iteration} 次迭代后完成`
-              : `任务在 ${state.iteration} 次迭代后完成`;
+        const title = state.ultrawork
+          ? 'ULTRAWORK 循环完成！'
+          : 'Ralph 循环完成！';
+        const message = state.ultrawork
+          ? `ULW ULW！任务在 ${state.iteration} 次迭代后完成`
+          : `任务在 ${state.iteration} 次迭代后完成`;
 
-            await ctx.client.tui
-              .showToast({
-                body: {
-                  title,
-                  message,
-                  variant: 'success',
-                  duration: 5000,
-                },
-              })
-              .catch(() => {});
+        await ctx.client.tui
+          .showToast({
+            body: { title, message, variant: 'success', duration: 5000 },
+          })
+          .catch(() => {});
 
-            return;
-          }
+        return;
+      }
 
-          if (lastPromise.trim() === yieldPromise) {
-            state.status = 'suspended';
-            state.suspended_at = new Date().toISOString();
-            state.next_poll_at = undefined;
+      // 路径 2: API 回退 — 检查最后 3 条 assistant 消息，
+      // 只拼接 text 部分（跳过 reasoning），防止 false positive
+      const lastPromise = await detectPromiseInSessionMessages(ctx, {
+        sessionID,
+        apiTimeoutMs: apiTimeout,
+      });
 
-            writeDefaultResumeTemplate(
-              ctx.directory,
-              resumeFile,
-              state.session_id,
-            );
-            writeState(ctx.directory, state, stateDir);
+      if (lastPromise) {
+        const completion = state.completion_promise;
+        const yieldPromise = state.yield_promise ?? DEFAULT_YIELD_PROMISE;
 
-            await ctx.client.tui
-              .showToast({
-                body: {
-                  title: 'Ralph 循环已挂起',
-                  message: `等待恢复（${resumeFile}）`,
-                  variant: 'info',
-                  duration: 5000,
-                },
-              })
-              .catch(() => {});
+        if (lastPromise.trim() === completion) {
+          log(`[${HOOK_NAME}] Completion detected!`, {
+            sessionID,
+            iteration: state.iteration,
+            promise: completion,
+            detectedVia: 'session_messages_api',
+          });
+          clearState(ctx.directory, stateDir);
 
-            return;
-          }
+          const title = state.ultrawork
+            ? 'ULTRAWORK 循环完成！'
+            : 'Ralph 循环完成！';
+          const message = state.ultrawork
+            ? `ULW ULW！任务在 ${state.iteration} 次迭代后完成`
+            : `任务在 ${state.iteration} 次迭代后完成`;
+
+          await ctx.client.tui
+            .showToast({
+              body: { title, message, variant: 'success', duration: 5000 },
+            })
+            .catch(() => {});
+
+          return;
+        }
+
+        if (lastPromise.trim() === yieldPromise) {
+          state.status = 'suspended';
+          state.suspended_at = new Date().toISOString();
+          state.next_poll_at = undefined;
+
+          writeDefaultResumeTemplate(
+            ctx.directory,
+            resumeFile,
+            state.session_id,
+          );
+          writeState(ctx.directory, state, stateDir);
+
+          await ctx.client.tui
+            .showToast({
+              body: {
+                title: 'Ralph 循环已挂起',
+                message: `等待恢复（${resumeFile}）`,
+                variant: 'info',
+                duration: 5000,
+              },
+            })
+            .catch(() => {});
+
+          return;
         }
       }
 
@@ -721,19 +896,29 @@ export function createRalphLoopHook(
         })
         .catch(() => {});
 
-      try {
-        await ctx.client.session.prompt({
+      // 注入时保留原始 agent 和 model，防止子代理会话中 agent 切换
+      // 使用非阻塞方式（fire-and-forget）避免阻塞事件循环
+      const { agent, model } = await resolveSessionAgentAndModel(
+        ctx,
+        sessionID,
+        apiTimeout,
+      );
+
+      ctx.client.session
+        .prompt({
           path: { id: sessionID },
           body: {
+            ...(agent !== undefined ? { agent } : {}),
+            ...(model !== undefined ? { model } : {}),
             parts: [{ type: 'text', text: finalPrompt }],
           },
+        })
+        .catch((err: unknown) => {
+          log(`[${HOOK_NAME}] Failed to inject continuation`, {
+            sessionID,
+            error: String(err),
+          });
         });
-      } catch (err) {
-        log(`[${HOOK_NAME}] Failed to inject continuation`, {
-          sessionID,
-          error: String(err),
-        });
-      }
     }
 
     if (event.type === 'session.deleted') {

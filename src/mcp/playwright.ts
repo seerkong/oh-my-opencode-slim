@@ -6,5 +6,5 @@ import type { LocalMcpConfig } from './types';
  */
 export const playwright: LocalMcpConfig = {
   type: 'local',
-  command: ['npx', '@playwright/mcp@latest'],
+  command: ['npx', '@playwright/mcp@latest', '--headed'],
 };

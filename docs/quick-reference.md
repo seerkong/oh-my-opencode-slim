@@ -476,6 +476,11 @@ The plugin supports **JSONC** format for configuration files, allowing you to:
     "enabled": true,  // Enable for monitoring
     "layout": "main-vertical",
   },
+
+  "session_notification": {
+    "backoffMultiplier": 2,
+    "maxIdleConfirmationDelay": 60000,
+  },
 }
 ```
 
@@ -497,6 +502,8 @@ The installer generates this file based on your providers. You can manually cust
 | `tmux.enabled` | boolean | `false` | Enable tmux pane spawning for sub-agents |
 | `tmux.layout` | string | `"main-vertical"` | Layout preset: `main-vertical`, `main-horizontal`, `tiled`, `even-horizontal`, `even-vertical` |
 | `tmux.main_pane_size` | number | `60` | Main pane size as percentage (20-80) |
+| `session_notification.backoffMultiplier` | number | `2` | Exponential backoff multiplier for repeated idle notifications |
+| `session_notification.maxIdleConfirmationDelay` | number | `60000` | Maximum backoff delay cap in milliseconds |
 | `disabled_mcps` | string[] | `[]` | MCP server IDs to disable globally (e.g., `"websearch"`) |
 
 > **Note:** Agent configuration should be defined within `presets`. The root-level `agents` field is deprecated.

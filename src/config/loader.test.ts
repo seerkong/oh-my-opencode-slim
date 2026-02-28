@@ -303,6 +303,36 @@ describe('deepMerge behavior', () => {
     expect(config.disabled_mcps).toEqual(['context7']);
   });
 
+  test('merges session notification backoff settings', () => {
+    const userOpencodeDir = path.join(userConfigDir, 'opencode');
+    fs.mkdirSync(userOpencodeDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(userOpencodeDir, 'oh-my-opencode-slim.json'),
+      JSON.stringify({
+        session_notification: {
+          backoffMultiplier: 2,
+          maxIdleConfirmationDelay: 60000,
+        },
+      }),
+    );
+
+    const projectDir = path.join(tempDir, 'project');
+    const projectConfigDir = path.join(projectDir, '.opencode');
+    fs.mkdirSync(projectConfigDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(projectConfigDir, 'oh-my-opencode-slim.json'),
+      JSON.stringify({
+        session_notification: {
+          maxIdleConfirmationDelay: 90000,
+        },
+      }),
+    );
+
+    const config = loadPluginConfig(projectDir);
+    expect(config.session_notification?.backoffMultiplier).toBe(2);
+    expect(config.session_notification?.maxIdleConfirmationDelay).toBe(90000);
+  });
+
   test('handles missing user config gracefully', () => {
     // Don't create user config, only project
     const projectDir = path.join(tempDir, 'project');

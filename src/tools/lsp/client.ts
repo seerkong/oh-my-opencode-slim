@@ -14,6 +14,40 @@ import {
 import { getLanguageId } from './config';
 import type { Diagnostic, ResolvedServer } from './types';
 
+const LSP_INIT_TIMEOUT_MS = 15_000;
+const LSP_REQUEST_TIMEOUT_MS = 10_000;
+const LSP_DIAGNOSTICS_TIMEOUT_MS = 5_000;
+const LSP_SHUTDOWN_TIMEOUT_MS = 2_000;
+
+export class LSPTimeoutError extends Error {
+  constructor(operation: string, timeoutMs: number) {
+    super(`LSP ${operation} timeout after ${timeoutMs}ms`);
+    this.name = 'LSPTimeoutError';
+  }
+}
+
+function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  operation: string,
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      reject(new LSPTimeoutError(operation, timeoutMs));
+    }, timeoutMs);
+
+    promise
+      .then((value) => {
+        clearTimeout(timeout);
+        resolve(value);
+      })
+      .catch((error: unknown) => {
+        clearTimeout(timeout);
+        reject(error);
+      });
+  });
+}
+
 interface ManagedClient {
   client: LSPClient;
   lastUsedAt: number;
@@ -107,10 +141,14 @@ class LSPServerManager {
     }
 
     const client = new LSPClient(root, server);
-    const initPromise = (async () => {
-      await client.start();
-      await client.initialize();
-    })();
+    const initPromise = withTimeout(
+      (async () => {
+        await client.start();
+        await client.initialize();
+      })(),
+      LSP_INIT_TIMEOUT_MS,
+      `server initialization (${server.id})`,
+    );
 
     this.clients.set(key, {
       client,
@@ -129,6 +167,9 @@ class LSPServerManager {
       }
     } catch (err) {
       this.clients.delete(key);
+      try {
+        await client.stop();
+      } catch {}
       throw err;
     }
 
@@ -176,6 +217,26 @@ export class LSPClient {
     private root: string,
     private server: ResolvedServer,
   ) {}
+
+  private ensureConnection(): MessageConnection {
+    if (!this.connection) {
+      throw new Error('LSP connection not established');
+    }
+    return this.connection;
+  }
+
+  private sendRequest<T>(
+    method: string,
+    params: unknown,
+    timeoutMs = LSP_REQUEST_TIMEOUT_MS,
+  ): Promise<T> {
+    const connection = this.ensureConnection();
+    return withTimeout(
+      connection.sendRequest(method, params) as Promise<T>,
+      timeoutMs,
+      `request ${method}`,
+    );
+  }
 
   async start(): Promise<void> {
     this.proc = spawn(this.server.command, {
@@ -303,10 +364,8 @@ export class LSPClient {
   }
 
   async initialize(): Promise<void> {
-    if (!this.connection) throw new Error('LSP connection not established');
-
     const rootUri = pathToFileURL(this.root).href;
-    await this.connection.sendRequest('initialize', {
+    await this.sendRequest('initialize', {
       processId: process.pid,
       rootUri,
       rootPath: this.root,
@@ -334,7 +393,7 @@ export class LSPClient {
       },
       ...this.server.initialization,
     });
-    this.connection.sendNotification('initialized');
+    this.ensureConnection().sendNotification('initialized');
     await new Promise((r) => setTimeout(r, 300));
   }
 
@@ -366,7 +425,7 @@ export class LSPClient {
   ): Promise<unknown> {
     const absPath = resolve(filePath);
     await this.openFile(absPath);
-    return this.connection?.sendRequest('textDocument/definition', {
+    return this.sendRequest('textDocument/definition', {
       textDocument: { uri: pathToFileURL(absPath).href },
       position: { line: line - 1, character },
     });
@@ -380,7 +439,7 @@ export class LSPClient {
   ): Promise<unknown> {
     const absPath = resolve(filePath);
     await this.openFile(absPath);
-    return this.connection?.sendRequest('textDocument/references', {
+    return this.sendRequest('textDocument/references', {
       textDocument: { uri: pathToFileURL(absPath).href },
       position: { line: line - 1, character },
       context: { includeDeclaration },
@@ -394,11 +453,12 @@ export class LSPClient {
     await new Promise((r) => setTimeout(r, 500));
 
     try {
-      const result = await this.connection?.sendRequest(
+      const result = await this.sendRequest(
         'textDocument/diagnostic',
         {
           textDocument: { uri },
         },
+        LSP_DIAGNOSTICS_TIMEOUT_MS,
       );
       if (result && typeof result === 'object' && 'items' in result) {
         return result as { items: Diagnostic[] };
@@ -416,7 +476,7 @@ export class LSPClient {
   ): Promise<unknown> {
     const absPath = resolve(filePath);
     await this.openFile(absPath);
-    return this.connection?.sendRequest('textDocument/rename', {
+    return this.sendRequest('textDocument/rename', {
       textDocument: { uri: pathToFileURL(absPath).href },
       position: { line: line - 1, character },
       newName,
@@ -432,7 +492,11 @@ export class LSPClient {
   async stop(): Promise<void> {
     try {
       if (this.connection) {
-        await this.connection.sendRequest('shutdown');
+        await withTimeout(
+          this.connection.sendRequest('shutdown'),
+          LSP_SHUTDOWN_TIMEOUT_MS,
+          'request shutdown',
+        );
         this.connection.sendNotification('exit');
         this.connection.dispose();
       }

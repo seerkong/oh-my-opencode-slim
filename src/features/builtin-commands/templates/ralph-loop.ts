@@ -40,7 +40,7 @@ export const RALPH_LOOP_TEMPLATE = `你正在启动 Ralph 循环 - 一个持续�
 - 完成承诺标记："DONE"
 - 暂停承诺标记："YIELD"
 - 恢复模式："user,file"
-- 恢复文件：".sisyphus/ralph-resume.md"`;
+- 恢复文件：".eidolon/ralph-resume.md"`;
 
 export const CANCEL_RALPH_TEMPLATE = `取消当前活跃的 Ralph 循环。
 
@@ -55,7 +55,7 @@ export const RALPH_RESUME_TEMPLATE = `恢复已挂起的 Ralph 循环。
 
 用法：
 - 如果你有载荷，运行：/ralph-resume "<payload>"
-- 否则，将载荷写入 .sisyphus/ralph-resume.md（设置 status: ready），然后运行 /ralph-resume
+- 否则，将载荷写入 .eidolon/ralph-resume.md（设置 status: ready），然后运行 /ralph-resume
 
 行为：
 - 如果有 Ralph 循环处于挂起状态，恢复它。

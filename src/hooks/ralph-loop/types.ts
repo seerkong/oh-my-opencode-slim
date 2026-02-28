@@ -24,4 +24,6 @@ export interface RalphLoopOptions {
   config?: RalphLoopConfig;
   apiTimeout?: number;
   checkSessionExists?: (sessionId: string) => Promise<boolean>;
+  /** 获取会话 transcript JSONL 文件路径，用于快速完成检测 */
+  getTranscriptPath?: (sessionId: string) => string;
 }

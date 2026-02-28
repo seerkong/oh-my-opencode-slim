@@ -22,6 +22,8 @@ import {
   createSessionNotificationHook,
   createSessionRecoveryHook,
   createToolOutputTruncatorHook,
+  normalizeSessionStatusToIdle,
+  pruneRecentIdles,
 } from './hooks';
 import { createBuiltinMcps } from './mcp';
 import {
@@ -51,13 +53,72 @@ type ToolAfterInput = Parameters<ToolAfterHandler>[0];
 type ToolAfterOutput = Parameters<ToolAfterHandler>[1];
 type ChatMessagesTransformOutput = Parameters<ChatMessagesTransformHandler>[1];
 
+/**
+ * 创建事件多路复用器。
+ *
+ * 增强功能（参考 oh-my-opencode 的 src/plugin/event.ts）：
+ * - 将 session.status (type=idle) 合成为 session.idle 事件
+ * - 对原生 session.idle 和合成 session.idle 进行 500ms 窗口去重
+ * - 顺序分发事件到所有注册的处理器
+ */
 function createEventMultiplexer(
   handlers: Array<((input: EventInput) => Promise<void> | void) | undefined>,
 ) {
-  return async (input: EventInput) => {
+  // idle 事件去重状态
+  const recentSyntheticIdles = new Map<string, number>();
+  const recentRealIdles = new Map<string, number>();
+  const DEDUP_WINDOW_MS = 500;
+
+  const dispatchToHandlers = async (input: EventInput) => {
     for (const handler of handlers) {
       if (!handler) continue;
       await handler(input);
+    }
+  };
+
+  return async (input: EventInput) => {
+    // 清理过期的去重记录
+    pruneRecentIdles({
+      recentSyntheticIdles,
+      recentRealIdles,
+      now: Date.now(),
+      dedupWindowMs: DEDUP_WINDOW_MS,
+    });
+
+    // 如果是原生 session.idle，检查是否与近期合成 idle 重复
+    if (input.event.type === 'session.idle') {
+      const sessionID = (
+        input.event.properties as Record<string, unknown> | undefined
+      )?.sessionID as string | undefined;
+      if (sessionID) {
+        const emittedAt = recentSyntheticIdles.get(sessionID);
+        if (emittedAt && Date.now() - emittedAt < DEDUP_WINDOW_MS) {
+          // 已有合成 idle，跳过原生 idle 避免重复
+          recentSyntheticIdles.delete(sessionID);
+          return;
+        }
+        recentRealIdles.set(sessionID, Date.now());
+      }
+    }
+
+    // 分发原始事件到所有处理器
+    await dispatchToHandlers(input);
+
+    // 尝试将 session.status (type=idle) 合成为 session.idle
+    const syntheticIdle = normalizeSessionStatusToIdle(input);
+    if (syntheticIdle) {
+      const sessionID = (
+        syntheticIdle.event.properties as Record<string, unknown>
+      )?.sessionID as string;
+      // 检查是否与近期原生 idle 重复
+      const emittedAt = recentRealIdles.get(sessionID);
+      if (emittedAt && Date.now() - emittedAt < DEDUP_WINDOW_MS) {
+        recentRealIdles.delete(sessionID);
+        return;
+      }
+      recentSyntheticIdles.set(sessionID, Date.now());
+      // 分发合成的 session.idle 事件
+      await dispatchToHandlers(syntheticIdle as EventInput);
     }
   };
 }
@@ -168,14 +229,17 @@ const OhMyOpenCodeLite: Plugin = async (ctx) => {
   const editErrorRecoveryHook = createEditErrorRecoveryHook();
   const delegateTaskRetryHook = createDelegateTaskRetryHook();
   const contextWindowMonitorHook = createContextWindowMonitorHook(ctx);
-  const sessionNotificationHook = createSessionNotificationHook();
+  const sessionNotificationHook = createSessionNotificationHook(
+    config.session_notification ?? {},
+  );
   const sessionRecoveryHook = createSessionRecoveryHook();
 
-  const ralphLoop = config.ralph_loop?.enabled
-    ? createRalphLoopHook(ctx, {
-        config: config.ralph_loop,
-      })
-    : null;
+  const ralphLoop =
+    (config.ralph_loop?.enabled ?? true)
+      ? createRalphLoopHook(ctx, {
+          config: config.ralph_loop,
+        })
+      : null;
 
   return {
     name: 'oh-my-opencode-slim',
@@ -266,6 +330,9 @@ const OhMyOpenCodeLite: Plugin = async (ctx) => {
     },
 
     event: createEventMultiplexer([
+      // ---------------------------------------------------------------
+      // 已注册的功能钩子
+      // ---------------------------------------------------------------
       autoUpdateChecker.event,
       rulesInjectorHook.event,
       directoryAgentsInjectorHook.event,
@@ -273,6 +340,10 @@ const OhMyOpenCodeLite: Plugin = async (ctx) => {
       sessionNotificationHook.event,
       sessionRecoveryHook.event,
       ralphLoop?.event,
+
+      // ---------------------------------------------------------------
+      // 内联事件处理器
+      // ---------------------------------------------------------------
       async (input: EventInput) => {
         // Handle tmux pane spawning for OpenCode's built-in Task tool sessions
         await tmuxSessionManager.onSessionCreated(
@@ -291,15 +362,117 @@ const OhMyOpenCodeLite: Plugin = async (ctx) => {
         await backgroundManager.handleSessionStatus(
           input.event as {
             type: string;
-            properties?: { sessionID?: string; status?: { type: string } };
+            properties?: {
+              sessionID?: string;
+              status?: { type: string };
+            };
           },
         );
         await tmuxSessionManager.onSessionStatus(
           input.event as {
             type: string;
-            properties?: { sessionID?: string; status?: { type: string } };
+            properties?: {
+              sessionID?: string;
+              status?: { type: string };
+            };
           },
         );
+      },
+
+      // ---------------------------------------------------------------
+      // 全事件类型监听框架（便于后续扩展）
+      //
+      // 以下覆盖 OpenCode 的所有 16 种事件类型。
+      // 当前未使用的事件以注释形式保留，添加功能时取消注释即可。
+      // 事件类型定义见 src/types/events.ts
+      //
+      // 注意：session.status (type=idle) 会被 createEventMultiplexer
+      // 自动合成为 session.idle 事件并二次分发，无需手动处理。
+      // ---------------------------------------------------------------
+      async (input: EventInput) => {
+        const { type } = input.event;
+        const _props = input.event.properties as
+          | Record<string, unknown>
+          | undefined;
+
+        switch (type) {
+          // === Session 事件 ===
+
+          // session.created — 新会话创建
+          // 已由: autoUpdateChecker, sessionNotificationHook,
+          //       tmuxSessionManager (上方内联) 处理
+          case 'session.created':
+            break;
+
+          // session.idle — 会话空闲（agent 完成工作，等待用户输入）
+          // 已由: sessionNotificationHook, ralphLoop 处理
+          // 注意：也包含从 session.status(idle) 合成的事件
+          case 'session.idle':
+            break;
+
+          // session.status — 会话状态变更
+          // 子类型: idle / busy / retry / completed / error / cancelled
+          // 已由: sessionNotificationHook, sessionRecoveryHook,
+          //       backgroundManager, tmuxSessionManager (上方内联) 处理
+          case 'session.status':
+            break;
+
+          // session.updated — 会话更新（通用活动信号）
+          // 当前无处理器，预留扩展
+          case 'session.updated':
+            break;
+
+          // session.error — 会话错误
+          // 已由: sessionRecoveryHook, ralphLoop 处理
+          case 'session.error':
+            break;
+
+          // session.deleted — 会话销毁，用于清理状态
+          // 已由: rulesInjectorHook, directoryAgentsInjectorHook,
+          //       contextWindowMonitorHook, sessionNotificationHook,
+          //       ralphLoop 处理
+          case 'session.deleted':
+            break;
+
+          // session.compacted — 会话上下文被压缩/摘要化
+          // 已由: rulesInjectorHook, directoryAgentsInjectorHook 处理
+          case 'session.compacted':
+            break;
+
+          // === Message 事件 ===
+
+          // message.updated — 完整消息更新（角色、内容、模型信息）
+          // 已由: sessionNotificationHook 处理（作为活动信号）
+          case 'message.updated':
+            break;
+
+          // message.part.updated — 流式消息片段更新
+          // 当前无处理器，预留扩展
+          // 可用于：流式输出监控、实时内容分析
+          case 'message.part.updated':
+            break;
+
+          // === Tool 事件（通过 event handler 接收） ===
+
+          // 注意：tool.execute 和 tool.result 是 CLI 事件流专用，
+          // 不会通过插件 event handler 接收，因此不在 switch 中处理。
+          // 如需监听工具执行，使用 tool.execute.before / tool.execute.after hook。
+
+          // === 其他事件 ===
+          // tool.execute.before / tool.execute.after
+          //   → 通过 'tool.execute.before' / 'tool.execute.after' hook 处理
+          // chat.params / chat.message
+          //   → 通过 'chat.params' / 'chat.message' hook 处理
+          // experimental.chat.messages.transform
+          //   → 通过 'experimental.chat.messages.transform' hook 处理
+          // command.execute.before
+          //   → 通过 command hook 处理（当前未实现）
+          // experimental.session.compacting
+          //   → 通过 experimental hook 处理（当前未实现）
+
+          default:
+            break;
+        }
       },
     ]),
 

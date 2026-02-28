@@ -160,6 +160,10 @@ export function loadPluginConfig(directory: string): PluginConfig {
       agents: deepMerge(config.agents, projectConfig.agents),
       tmux: deepMerge(config.tmux, projectConfig.tmux),
       ralph_loop: deepMerge(config.ralph_loop, projectConfig.ralph_loop),
+      session_notification: deepMerge(
+        config.session_notification,
+        projectConfig.session_notification,
+      ),
       fallback: deepMerge(config.fallback, projectConfig.fallback),
     };
   }

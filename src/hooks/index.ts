@@ -25,10 +25,16 @@ export {
   findProjectRoot,
   findRuleFiles,
 } from './rules-injector';
-export type { SessionNotificationOptions } from './session-notification';
+export type {
+  IdleNotificationConfig,
+  SessionNotificationOptions,
+} from './session-notification';
 export {
+  createIdleNotificationScheduler,
   createSessionNotificationHook,
+  normalizeSessionStatusToIdle,
   probeNotifyBackend,
+  pruneRecentIdles,
   sendNotification,
 } from './session-notification';
 export type {
